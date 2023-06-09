@@ -46,19 +46,20 @@ class NewtonMatrix(Markers):
             self.vel_0 = np.zeros((self.N_BODS, 1), dtype=type(self.zero))
             # put a randomized distribution of velocities here
             dv = np.random.normal(loc=0, scale=15 * np.pi / 180, size=self.N_BODS)
+            self.vel_0 = np.cross([0, 0, 1], self.pos_0)
         else:
             self.vel_0 = vel_0
 
         assert (len(self.mass) == self.N_BODS)
         assert (len(self.pos_0) == self.N_BODS)
         assert (len(self.vel_0) == self.N_BODS)
-
+        [print(self.mass[n], self.pos_0[n], self.vel_0[n]) for n in range(0, self.N_BODS - 1)]
         self.SM = np.ndarray((self.N_BODS + 1, self.N_BODS + 1, 3), dtype=np.float64)
         print(type(self.SM), "\n")
         self.SM[0, 0] = self.T0
         self.SM[1:, 0] = pos_0
         self.SM[0, 1:] = vel_0
-        print(type(self.SM[1, 0]), type(self.SM[0, 1]))
+        # print(type(self.SM[1, 0]), type(self.SM[0, 1]))
 
         self.freeze()
         self.set_rel_posvel()
@@ -68,17 +69,17 @@ class NewtonMatrix(Markers):
         """
         :return:
         """
-        for i in range(1, self.N_BODS):
-            for j in range(self.N_BODS, 1, -1):
-                if i < j:
-                    print("(i<j): ", self.SM[j, 0], self.SM[i, 0])
-                    self.SM[i, j] = self.SM[j, 0] - self.SM[i, 0]
-                elif i > j:
-                    print("(i>j): ", self.SM[0, j], self.SM[0, i])
-                    self.SM[i, j] = self.SM[0, j] - self.SM[0, i]
-                elif i == j:
+        for i in range(1, self.N_BODS + 1):
+            for j in range(1, self.N_BODS + 1):
+                if i == j:
                     print("(i=j): ZERO???", self.SM[j, 0], self.SM[i, 0])
                     self.SM[i, j] = self.zero
+                elif i > j:
+                    print("(i<j): ", self.SM[j, 0], self.SM[i, 0])
+                    self.SM[i, j] = self.SM[j, 0] - self.SM[i, 0]
+                elif i < j:
+                    print("(i>j): ", self.SM[0, j], self.SM[0, i])
+                    self.SM[i, j] = self.SM[0, j] - self.SM[0, i]
 
     def set_accel(self):
         """
@@ -86,23 +87,26 @@ class NewtonMatrix(Markers):
         """
         for j in range(1, self.N_BODS):
             accel = self.zero
-            for i in range(self.N_BODS, 0, -1):
+            for i in range(1, self.N_BODS + 1):
 
                 if i > j:
                     dist_sqr = np.linalg.norm(self.SM[i, j], axis=0)
                     dist_sqr *= dist_sqr
                     print(i, j, ":dist_sqr (i>j) = ", dist_sqr)
-                    accel += self.SM[i, j] * (-self.G * self.mass[j] / dist_sqr)
+                    if dist_sqr != 0:
+                        accel += self.SM[i, j] * (-self.G * self.mass[j] / dist_sqr)
                 elif i < j:
-                    dist_sqr = np.linalg.norm(-self.SM[j, i], axis=0)
+                    dist_sqr = np.linalg.norm(-self.SM[i, j], axis=0)
                     dist_sqr *= dist_sqr
                     print(i, j, ":dist_sqr (i<j) = ", dist_sqr)
-                    accel += self.SM[j, i] * (+self.G * self.mass[j] / dist_sqr)
+                    if dist_sqr != 0:
+                        accel += -self.SM[i, j] * (-self.G * self.mass[j] / dist_sqr)
                 elif i == j:
                     dist_sqr = 0.0
                     print(i, j, ":dist_sqr (i=j) = ", dist_sqr)
 
             self.SM[j, j] = accel
+        [print("accel[", n, "] =", self.SM[n, n]) for n in range(1, self.N_BODS)]
 
 
 def axis_visual(scale=1.0, parent=None):
@@ -148,7 +152,7 @@ def main():
     N = 10
     mass = [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., ]
     theta = np.linspace(0, 359, N)
-    radius = np.random.normal(scale=1000, size=N) + 500
+    radius = np.random.normal(loc=1000, scale=100, size=N)
     pos_0 = np.zeros((N, 3), dtype=np.float64)
     vel_0 = np.zeros((N, 3), dtype=np.float64)
     vel0_dir = np.zeros((N, 3), dtype=np.float64)
