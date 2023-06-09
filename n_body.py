@@ -53,6 +53,7 @@ class NewtonMatrix(Markers):
         assert (len(self.mass) == self.N_BODS)
         assert (len(self.pos_0) == self.N_BODS)
         assert (len(self.vel_0) == self.N_BODS)
+
         [print(self.mass[n], self.pos_0[n], self.vel_0[n]) for n in range(0, self.N_BODS - 1)]
         self.SM = np.ndarray((self.N_BODS + 1, self.N_BODS + 1, 3), dtype=np.float64)
         print(type(self.SM), "\n")
@@ -108,6 +109,10 @@ class NewtonMatrix(Markers):
             self.SM[j, j] = accel
         [print("accel[", n, "] =", self.SM[n, n]) for n in range(1, self.N_BODS)]
 
+    def iterate(self):
+        """ Use acceleration values to update vel, then pos."""
+        return self.SM
+
 
 def axis_visual(scale=1.0, parent=None):
     """
@@ -150,6 +155,8 @@ def not_main():
 
 def main():
     N = 10
+    MAX_T = 10
+    T = 0
     mass = [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., ]
     theta = np.linspace(0, 359, N)
     radius = np.random.normal(loc=1000, scale=100, size=N)
@@ -167,6 +174,14 @@ def main():
         vel_0[n] = vel0_dir[n] * (1 / np.sqrt(np.linalg.norm(pos_0[n])))
 
     NM_0 = NewtonMatrix(mass=mass, pos_0=pos_0, vel_0=vel_0)
+    NM_T = [NM_0.SM]
+
+    while T < MAX_T:
+        NM_1 = NM_0.iterate()
+        NM_T.append(NM_1)
+        NM_0 = NM_1.copy()
+        T += 1
+    print(len(NM_T))
 
 
 if __name__ == '__main__':
