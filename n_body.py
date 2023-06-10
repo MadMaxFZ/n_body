@@ -75,6 +75,7 @@ class NewtonMatrix(Markers):
         for n in range(0, self.N_BODS - 1):
             self.SM[1 + n, 0] = self.pos_0[n]
             self.SM[0, 1 + n] = self.vel_0[n]
+
         self.set_rel_posvel()
         self.set_accel()
 
@@ -130,14 +131,25 @@ class NewtonMatrix(Markers):
     def iterate(self):
         """ Use acceleration values to update vel, then pos."""
         self.M_hist.append(self.SM)
-        self.T0 += 1
+        if self.T0 < self.T_MAX:
+            self.T0 += 1
+        else:
+            pass
+        dat = []
         for n in range(0, self.N_BODS):
             self.SM[0, 0] = self.T0
             self.SM[0, n + 1] += self.SM[n + 1, n + 1]
             self.SM[n + 1, 0] += self.SM[0, n + 1]
+            dat.append(self.SM[n + 1, 0])
+        self.set_data(pos=np.array(dat), size=4, edge_color="red", edge_width=1)
+        self.update()
         self.set_rel_posvel()
         self.set_accel()
 
+    def on_timer(self, event):
+        data = self.M_hist[self.T0]
+        self.set_data(pos=data[1:, 0], size=3, edge_color="red")
+        self.update()
 
 def axis_visual(scale=1.0, parent=None):
     """
@@ -165,45 +177,61 @@ def axis_visual(scale=1.0, parent=None):
 
     return axis
 
+# def update():
+#     global matrix, t, data
+#     data = matrix.M_hist[t]
+#     matrix.set_data(pos=np.array([data[n, 0] for n in range(1, matrix.N_BODS + 1)]), size=4, edge_color="red")
+#     # matrix.update()
+#     t += 1
+#     t = t % 999
 
-def not_main():
+
+def main(viz=None):
     # print("MAIN")
     can = SceneCanvas(title="Testing Transforms", size=(800, 600), keys="interactive", show=True)
     view = can.central_widget.add_view()
-    view.camera = FlyCamera()
-    view.camera.set_range()
-    viz = axis_visual(scale=3, parent=view.scene)
-    view.add(viz)
+    view.camera = "arcball"
+
+    matrix = NewtonMatrix()
+    view.add(matrix)
+    timer = app.Timer(iterations=matrix.T_MAX, interval=1)
+    timer.connect(matrix.iterate())
+    timer.start(0)
+    # view.camera.set_range()
+    # timer = app.Timer(connect=matrix.on_timer, iterations=matrix.T_MAX, start = True)
+
     can.show()
     app.run()
 
 
-def main():
-    N = 10
-    MAX_T = 10
-    T = 0
-    mass = [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., ]
-    theta = np.linspace(0, 359, N)
-    radius = np.random.normal(loc=1000, scale=100, size=N)
-    pos_0 = np.zeros((N, 3), dtype=np.float64)
-    vel_0 = np.zeros((N, 3), dtype=np.float64)
-    vel0_dir = np.zeros((N, 3), dtype=np.float64)
-
-    # for n in range(0, N - 1):
-    #     r = radius[n]
-    #     ct = np.cos(theta[n])
-    #     st = np.sin(theta[n])
-    #     print(r, ct, st)
-    #     pos_0[n] = [r * ct, r * st, 0]
-    #     vel0_dir[n] = np.cross(pos_0[n], [0.0, 0.0, 1.0]) / np.linalg.norm(pos_0[n])
-    #     vel_0[n] = vel0_dir[n] * (1 / np.sqrt(np.linalg.norm(pos_0[n])))
-
-    NM = NewtonMatrix(mass=None, pos_0=None, vel_0=None)
-
-    while NM.T0 < NM.T_MAX:
-        NM.iterate()
-
-    print(np.array(NM.M_hist).shape)
+# def iter_matrix():
+#     # N = 10
+#     # MAX_T = 10
+#     # T = 0
+#     # mass = [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., ]
+#     # theta = np.linspace(0, 359, N)
+#     # radius = np.random.normal(loc=1000, scale=100, size=N)
+#     # pos_0 = np.zeros((N, 3), dtype=np.float64)
+#     # vel_0 = np.zeros((N, 3), dtype=np.float64)
+#     # vel0_dir = np.zeros((N, 3), dtype=np.float64)
+#
+#     # for n in range(0, N - 1):
+#     #     r = radius[n]
+#     #     ct = np.cos(theta[n])
+#     #     st = np.sin(theta[n])
+#     #     print(r, ct, st)
+#     #     pos_0[n] = [r * ct, r * st, 0]
+#     #     vel0_dir[n] = np.cross(pos_0[n], [0.0, 0.0, 1.0]) / np.linalg.norm(pos_0[n])
+#     #     vel_0[n] = vel0_dir[n] * (1 / np.sqrt(np.linalg.norm(pos_0[n])))
+#
+#
+#
+#     while NM.T0 < NM.T_MAX:
+#         NM.iterate()
+#
+#     return NM
+#
+#     print(np.array(NM.M_hist).shape)
 
 
 if __name__ == '__main__':
