@@ -22,7 +22,7 @@ class NewtonMatrix(SceneCanvas):
         self.unfreeze()
         self.warp = .5
         self.view = self.central_widget.add_view()
-        self.view.camera = "turntable"
+        self.view.camera = "fly"
         self.zero = np.zeros((1, 3), dtype=np.float64)
         G = 6.67430e-11
         self.G = G * 500
@@ -222,6 +222,7 @@ def main():
     can.view.add(axis)
     can.show()
     can.app.run()
+
 
 if __name__ == '__main__':
     main()
