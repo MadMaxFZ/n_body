@@ -21,7 +21,7 @@ class NewtonMatrix(SceneCanvas):
         self.unfreeze()
         self.warp = 1000
         self.view = self.central_widget.add_view()
-        self.view.camera = "turntable"
+        self.view.camera = "arcball"
         self.zero = np.zeros((1, 3), dtype=np.float64)
         G = 6.67430e-11
         self.G = G * 500
