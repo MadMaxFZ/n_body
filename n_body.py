@@ -1,9 +1,15 @@
+import logging
 import numpy as np
 from vispy import app
 from vispy.scene import SceneCanvas
 from vispy.scene.visuals import XYZAxis, Markers
 from vispy.visuals.transforms import MatrixTransform
 from vispy.scene.cameras import FlyCamera
+
+logging.basicConfig(filename='n_body.log',
+                    level=logging.INFO,
+                    format='PV_%(levelname)s:%(asctime)s:%(message)s'
+                    )
 
 
 class NewtonMatrix(SceneCanvas):
@@ -37,7 +43,7 @@ class NewtonMatrix(SceneCanvas):
             self.mass = np.ndarray((self.N_BODS, 1), dtype=np.float64)
             # put a randomized distribution of masses here
             self.mass = np.random.normal(loc=3000, scale=500, size=self.N_BODS)
-            self.mass[0] *= 1000
+            self.mass[0] *= 1e+06
             # print("N_BODS =", self.N_BODS)
             # print("MASS =", self.mass)
         else:
@@ -51,6 +57,7 @@ class NewtonMatrix(SceneCanvas):
             mag_pos = np.random.normal(loc=300, scale=50, size=self.N_BODS)
             # print("mag_pos =", mag_pos, len(mag_pos))
             norm_pos = np.array([np.cos(_th), np.sin(_th), np.sin(_th - _th)]).transpose()
+            mag_pos[0] = 0
             # print("norm_pos =", norm_pos, len(norm_pos))
             self.pos_0 = np.array([mag_pos[n] * norm_pos[n] for n in range(0, self.N_BODS)])
             # print("pos_0 =", self.pos_0, len(self.pos_0))
@@ -58,11 +65,13 @@ class NewtonMatrix(SceneCanvas):
             self.pos_0 = pos_0
 
         if vel_0 is None:
+
             self.vel_0 = np.zeros((1, self.N_BODS), dtype=type(np.array(3, dtype=np.float64)))
             # put a randomized distribution of velocities here
             dv = np.array(np.sin(np.random.normal(loc=0, scale=15 * np.pi / 180, size=self.N_BODS)))
             # print("dv =", dv)
-            self.vel_0 = [norm_pos[n] * dv[n] + np.cross([0, 0, 1], norm_pos[n]) / np.sqrt(mag_pos[n]) for n in range(0, self.N_BODS)]
+            self.vel_0 = [0]
+            self.vel_0.extend([norm_pos[n] + np.cross([0, 0, 1], norm_pos[n]) / np.sqrt(mag_pos[n]) for n in range(1, self.N_BODS)])
         else:
             self.vel_0 = vel_0
 
@@ -84,11 +93,16 @@ class NewtonMatrix(SceneCanvas):
 
         self.SM[0, 0] = self.T0
         dat = []
-        for n in range(0, self.N_BODS - 1):
-            self.SM[1 + n, 0] = self.pos_0[n]
-            self.SM[0, 1 + n] = self.vel_0[n]
-            dat.append(self.pos_0[n])
-        print(dat)
+        for n in range(0, self.N_BODS):
+            if n == 0:
+                self.SM[1 + n, 0] = self.zero
+                self.SM[0, 1 + n] = self.zero
+            else:
+                self.SM[1 + n, 0] = self.pos_0[n]
+                self.SM[0, 1 + n] = self.vel_0[n]
+
+            dat.append(self.SM[1 + n, 0])
+        logging.info(str(dat))
         self.set_rel_posvel()
         self.set_accel()
         self.get_averages()
@@ -109,15 +123,15 @@ class NewtonMatrix(SceneCanvas):
         """
         for i in range(1, self.N_BODS + 1):
             for j in range(1, self.N_BODS + 1):
-                if i == j:
+                if i == j:          # rel_pos and rel_vel both zero
                     # print("(i=j): ZERO???", self.SM[j, 0], self.SM[i, 0])
                     self.SM[i, j] = self.zero
-                elif i > j:
+                elif i > j:         # records rel position from i to j
                     # print("(i<j): ", self.SM[j, 0], self.SM[i, 0])
                     self.SM[i, j] = self.SM[j, 0] - self.SM[i, 0]
-                elif i < j:
+                elif i < j:         # records rel velocity from i to j
                     # print("(i>j): ", self.SM[0, j], self.SM[0, i])
-                    self.SM[i, j] = self.SM[0, j] - self.SM[0, i]
+                    self.SM[i, j] = self.SM[0, i] - self.SM[0, j]
 
     def set_accel(self):
         """
@@ -134,7 +148,7 @@ class NewtonMatrix(SceneCanvas):
                     if dist_sqr != 0:
                         accel += self.warp * self.SM[i, j] * (-self.G * self.mass[j] / dist_sqr)
                 elif i < j:
-                    dist_sqr = np.linalg.norm(-self.SM[j, i], axis=0)
+                    dist_sqr = np.linalg.norm(-self.SM[i, j], axis=0)
                     dist_sqr *= dist_sqr
                     # print(i, j, ":dist_sqr (i<j) = ", dist_sqr)
                     if dist_sqr != 0:
@@ -149,21 +163,22 @@ class NewtonMatrix(SceneCanvas):
     def iterate(self, event):
         """ Use acceleration values to update vel, then pos."""
         # self.M_hist.append(self.SM)
-        if self.T0 < self.T_MAX:
-            self.T0 += 1
-        else:
-            pass
+        # if self.T0 < self.T_MAX:
+        #     self.T0 += 1
+        # else:
+        #     pass
+        self.T0 += 1
+        self.SM[0, 0] = self.T0
         dat = []
         for n in range(0, self.N_BODS):
-            self.SM[0, 0] = self.T0
             self.SM[0, n + 1] += self.SM[n + 1, n + 1]
             self.SM[n + 1, 0] += self.SM[0, n + 1]
             dat.append(self.SM[n + 1, 0])
         self.particles.set_data(pos=np.array(dat), size=4, edge_color="red", edge_width=1)
         trx = MatrixTransform()
-        trx.translate(-self.avg_pos)
+        trx.rotate(-90, [1, 0, 0])
+        trx.translate(-dat[0])
         self.particles.transform = trx
-        # self.update()
         self.set_rel_posvel()
         self.set_accel()
 
@@ -232,6 +247,9 @@ def main(viz=None):
     # view.camera.set_range()
     # timer = app.Timer(connect=matrix.on_timer, iterations=matrix.T_MAX, start = True)
     frame = axis_visual(scale=1000, parent=can.view.scene)
+    trx = MatrixTransform()
+    trx.rotate(-90, [1, 0, 0])
+    frame.transform = trx
     can.view.add(frame)
     # can.particles.parent=frame
     can.show()
