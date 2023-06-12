@@ -16,21 +16,22 @@ class NewtonMatrix(SceneCanvas):
     """
 
     """
-    def __init__(self, num_bods=100, mass=None, pos_0=None, vel_0=None, *args, **kwargs):
+    def __init__(self, num_bods=50, mass=None, pos_0=None, vel_0=None, *args, **kwargs):
         """
 
         :type T0: np.float64
         :param num_bods:
         """
-        super(NewtonMatrix, self).__init__(title="Figuring out Markers and SHit", keys='interactive',
+        global norm_pos, mag_pos
+        super(NewtonMatrix, self).__init__(title="Figuring out Markers and SHIT", keys='interactive',
                                            fullscreen=True, size=(800, 600))
         self.unfreeze()
-        self.warp = 1000
+        self.warp = 10
         self.view = self.central_widget.add_view()
         self.view.camera = "arcball"
-        self.zero = np.zeros((1, 3), dtype=np.float64)
+        self.zero = np.zeros(3, dtype=np.float64)
         G = 6.67430e-11
-        self.G = G * 500
+        self.G = G * 1
         self.T0 = 0
         self.T_MAX = 1000
         self.N_BODS = num_bods
@@ -38,40 +39,46 @@ class NewtonMatrix(SceneCanvas):
         self.avg_pos = self.zero.copy()
         self.avg_vel = self.zero.copy()
         self.avg_acc = self.zero.copy()
+        self.cm_pos = self.zero.copy()
 
         if mass is None:
-            self.mass = np.ndarray((self.N_BODS, 1), dtype=np.float64)
+            # self.mass = np.ndarray((self.N_BODS, 1), dtype=np.float64)
             # put a randomized distribution of masses here
-            self.mass = np.random.normal(loc=3000, scale=500, size=self.N_BODS)
-            self.mass[0] *= 1e+06
+            self.mass = np.random.normal(loc=1000, scale=500, size=self.N_BODS)
+            self.mass[0] *= 1e+09
+            self.tot_mass = np.sum(self.mass)
+            self.part_mass = self.mass / self.tot_mass
             # print("N_BODS =", self.N_BODS)
             # print("MASS =", self.mass)
         else:
             self.mass = mass
 
         if pos_0 is None:
-            self.pos_0 = np.zeros((1, self.N_BODS), dtype=type(np.array(3, dtype=np.float64)))
-            norm_pos = np.zeros((1, self.N_BODS), dtype=type(np.array(3, dtype=np.float64)))
+            self.pos_0 = np.zeros(self.N_BODS, dtype=type(np.array(3, dtype=np.float64)))
+            norm_pos = np.zeros(self.N_BODS, dtype=type(np.array(3, dtype=np.float64)))
             # put a randomized distribution of positions here
-            _th = np.linspace(0, 2 * np.pi, self.N_BODS)
-            mag_pos = np.random.normal(loc=300, scale=50, size=self.N_BODS)
+            thetas = np.linspace(0, 2 * np.pi, self.N_BODS)
+            _ph = 0
+            mag_pos = np.random.normal(loc=200, scale=50, size=self.N_BODS)
             # print("mag_pos =", mag_pos, len(mag_pos))
-            norm_pos = np.array([np.cos(_th), np.sin(_th), np.sin(_th - _th)]).transpose()
+            norm_pos = np.array([(np.cos(t), np.sin(t), np.sin(_ph)) for t in thetas]) # , dtype=type(np.array(3, dtype=np.float64)))
             mag_pos[0] = 0
             # print("norm_pos =", norm_pos, len(norm_pos))
-            self.pos_0 = np.array([mag_pos[n] * norm_pos[n] for n in range(0, self.N_BODS)])
+            self.pos_0 = [mag_pos[n] * norm_pos[n] for n in range(0, self.N_BODS)]
+            # self.pos_0 = np.array([mag_pos[n] * norm_pos[n] for n in range(0, self.N_BODS)])
             # print("pos_0 =", self.pos_0, len(self.pos_0))
         else:
             self.pos_0 = pos_0
 
         if vel_0 is None:
-
-            self.vel_0 = np.zeros((1, self.N_BODS), dtype=type(np.array(3, dtype=np.float64)))
+            self.vel_0 = np.zeros(self.N_BODS, dtype=type(np.array(3, dtype=np.float64)))
             # put a randomized distribution of velocities here
             dv = np.array(np.sin(np.random.normal(loc=0, scale=15 * np.pi / 180, size=self.N_BODS)))
             # print("dv =", dv)
             self.vel_0 = [0]
-            self.vel_0.extend([norm_pos[n] + np.cross([0, 0, 1], norm_pos[n]) / np.sqrt(mag_pos[n]) for n in range(1, self.N_BODS)])
+            self.vel_0.extend([(1 + dv[n]) * norm_pos[n] + np.cross([0, 0, 1], norm_pos[n]) * np.sqrt(self.G * self.mass[0] / mag_pos[n]) for n in range(1, self.N_BODS)])
+        elif vel_0 == 0:
+            self.vel_0 = np.zeros(self.N_BODS, dtype=type(np.array(3, dtype=np.float64)))
         else:
             self.vel_0 = vel_0
 
@@ -92,7 +99,7 @@ class NewtonMatrix(SceneCanvas):
         self.view.add(self.particles)
 
         self.SM[0, 0] = self.T0
-        dat = []
+        dat = np.zeros((self.N_BODS, 3), dtype=np.float64)
         for n in range(0, self.N_BODS):
             if n == 0:
                 self.SM[1 + n, 0] = self.zero
@@ -101,12 +108,14 @@ class NewtonMatrix(SceneCanvas):
                 self.SM[1 + n, 0] = self.pos_0[n]
                 self.SM[0, 1 + n] = self.vel_0[n]
 
-            dat.append(self.SM[1 + n, 0])
-        logging.info(str(dat))
+        dat = self.SM[1:, 0]
+        [logging.info(str(n) + ":: mass :" + str(self.mass[n]) + " *** " + str(type(dat[n])) +
+                      " *** " + str(dat[n]) + "\n" + str(len(dat[n]))) for n in range(0, self.N_BODS)]
+        print(dat.shape)
         self.set_rel_posvel()
         self.set_accel()
         self.get_averages()
-        self.particles.set_data(pos=np.array(dat), size=4, edge_color="red", edge_width=1)
+        self.particles.set_data(pos=self.SM[1:, 0], size=2, edge_color="red", edge_width=1)
         self.show()
         self._timer = app.Timer(interval='auto', connect=self.iterate, start=True, app=self.app)
         self.freeze()
@@ -126,38 +135,29 @@ class NewtonMatrix(SceneCanvas):
                 if i == j:          # rel_pos and rel_vel both zero
                     # print("(i=j): ZERO???", self.SM[j, 0], self.SM[i, 0])
                     self.SM[i, j] = self.zero
-                elif i > j:         # records rel position from i to j
+                else:         # records rel position from i to j
                     # print("(i<j): ", self.SM[j, 0], self.SM[i, 0])
                     self.SM[i, j] = self.SM[j, 0] - self.SM[i, 0]
-                elif i < j:         # records rel velocity from i to j
-                    # print("(i>j): ", self.SM[0, j], self.SM[0, i])
-                    self.SM[i, j] = self.SM[0, i] - self.SM[0, j]
+                # elif i < j:         # records rel velocity from i to j
+                #     # print("(i>j): ", self.SM[0, j], self.SM[0, i])
+                #     self.SM[i, j] = self.SM[0, i] - self.SM[0, j]
 
     def set_accel(self):
         """
         :return:
         """
-        for j in range(1, self.N_BODS):
+        for j in range(1, self.N_BODS + 1):
             accel = self.zero
             for i in range(1, self.N_BODS + 1):
-
-                if i > j:
-                    dist_sqr = np.linalg.norm(self.SM[i, j], axis=0)
+                if i != j:
+                    dist_sqr = np.linalg.norm(self.SM[i, j])
                     dist_sqr *= dist_sqr
                     # print(i, j, ":dist_sqr (i>j) = ", dist_sqr)
                     if dist_sqr != 0:
-                        accel += self.warp * self.SM[i, j] * (-self.G * self.mass[j] / dist_sqr)
-                elif i < j:
-                    dist_sqr = np.linalg.norm(-self.SM[i, j], axis=0)
-                    dist_sqr *= dist_sqr
-                    # print(i, j, ":dist_sqr (i<j) = ", dist_sqr)
-                    if dist_sqr != 0:
-                        accel += -self.warp * self.SM[j, i] * (-self.G * self.mass[j] / dist_sqr)
-                elif i == j:
-                    dist_sqr = 0.0
-                    # print(i, j, ":dist_sqr (i=j) = ", dist_sqr)
+                        accel += self.SM[i, j] * (-self.G * self.mass[j - 1] / dist_sqr)
 
             self.SM[j, j] = accel
+        self.SM[1, 1] = np.array([0, 0, 0])
         # [print("accel[", n, "] =", self.SM[n, n]) for n in range(1, self.N_BODS)]
 
     def iterate(self, event):
@@ -170,33 +170,45 @@ class NewtonMatrix(SceneCanvas):
         self.T0 += 1
         self.SM[0, 0] = self.T0
         dat = []
-        for n in range(0, self.N_BODS):
-            self.SM[0, n + 1] += self.SM[n + 1, n + 1]
-            self.SM[n + 1, 0] += self.SM[0, n + 1]
-            dat.append(self.SM[n + 1, 0])
+        for n in range(1, self.N_BODS + 1):
+            self.SM[0, n] += self.SM[n, n] * self.warp
+            # self.SM[0, n] -= self.avg_acc
+            # print(self.cm_pos.shape, self.SM[n, 0].shape)
+            self.SM[n, 0] += self.SM[0, n] * self.warp
+            # self.SM[n, 0] -= self.SM[1, 0]
+            # self.SM[n, 0] -= self.cm_pos
+            dat.append(self.SM[n, 0] - self.SM[1, 0])
+        self.SM[1, 0] = self.zero.copy()
+        print(type(dat))
         self.particles.set_data(pos=np.array(dat), size=4, edge_color="red", edge_width=1)
         trx = MatrixTransform()
         trx.rotate(-90, [1, 0, 0])
-        trx.translate(-dat[0])
+        trx.translate(-self.cm_pos)
         self.particles.transform = trx
         self.set_rel_posvel()
         self.set_accel()
+        self.get_averages()
 
     def get_averages(self):
         self.avg_pos = self.zero.copy()
         self.avg_vel = self.zero.copy()
         self.avg_acc = self.zero.copy()
+        self.cm_pos = self.zero.copy()
+        tot_mass = 0
         for n in range(1, self.N_BODS + 1):
             self.avg_pos += self.SM[n, 0]
             self.avg_vel += self.SM[0, n]
             self.avg_acc += self.SM[n, n]
-        self.avg_pos /= self.N_BODS
-        self.avg_vel /= self.N_BODS
-        self.avg_acc /= self.N_BODS
+            self.cm_pos += self.part_mass[n - 1] * self.SM[n, 0]
+        # self.cm_pos /= tot_mss
+        # self.avg_pos /= self.N_BODS
+        # self.avg_vel /= self.N_BODS
+        # self.avg_acc /= self.N_BODS
         print("\n>>>>", self.T0, "<<<<")
         print("AVG_POS =", self.avg_pos)
         print("AVG_VEL =", self.avg_vel)
         print("AVG_ACC =", self.avg_acc)
+        print("CENTER OF MASS =", self.cm_pos)
 
 
 def axis_visual(scale=1.0, parent=None):
@@ -236,6 +248,7 @@ def axis_visual(scale=1.0, parent=None):
 
 def main(viz=None):
     # print("MAIN")
+
     can = NewtonMatrix()
     # view.camera = "arcball"
     #
@@ -246,9 +259,10 @@ def main(viz=None):
     # timer.start(0)
     # view.camera.set_range()
     # timer = app.Timer(connect=matrix.on_timer, iterations=matrix.T_MAX, start = True)
-    frame = axis_visual(scale=1000, parent=can.view.scene)
+    frame = axis_visual(scale=1000000, parent=can.view.scene)
     trx = MatrixTransform()
     trx.rotate(-90, [1, 0, 0])
+    trx.scale((1, 1))
     frame.transform = trx
     can.view.add(frame)
     # can.particles.parent=frame
