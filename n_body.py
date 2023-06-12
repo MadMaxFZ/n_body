@@ -44,7 +44,7 @@ class NewtonMatrix(SceneCanvas):
         if mass is None:
             # self.mass = np.ndarray((self.N_BODS, 1), dtype=np.float64)
             # put a randomized distribution of masses here
-            self.mass = np.random.normal(loc=1000, scale=500, size=self.N_BODS)
+            self.mass = np.random.normal(loc=1000, scale=20, size=self.N_BODS)
             self.mass[0] *= 1e+09
             self.tot_mass = np.sum(self.mass)
             self.part_mass = self.mass / self.tot_mass
