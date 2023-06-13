@@ -22,6 +22,7 @@ class NewtonMatrix(SceneCanvas):
                  t_start=1, t_end=100,
                  n_frames=100,
                  has_star=True,
+                 star_mass=100,
                  *args, **kwargs):
         """
 
@@ -40,6 +41,7 @@ class NewtonMatrix(SceneCanvas):
         self.ticks = 0
         self.warp = 0.01                            # 'time' elapsed per frame
         self.has_star = has_star
+        self.star_mass = star_mass
         self.N_bods = num_bods                      # number of particles to create
         self.zero = np.zeros(3, dtype=np.float64)   # default zero vector
         self.cm_pos = self.zero.copy()              # center of mass position
@@ -73,14 +75,14 @@ class NewtonMatrix(SceneCanvas):
 
     # =========================================================================================
 
-    def set_positions(self):
+    def init_pos(self):
         """
 
         :return:
         :rtype:
         """
-        norm_pos = np.zeros((self.N_bods, 3), dtype=np.float64)
         # put a randomized distribution of positions here
+        self.mass = np.linspace(start=1, stop=1, num=self.N_bods)
         thetas = np.linspace(0, 2 * np.pi, self.N_bods)
         _ph = 0
         mag_pos = np.random.normal(loc=200, scale=50, size=self.N_bods)
@@ -89,10 +91,11 @@ class NewtonMatrix(SceneCanvas):
             [(np.cos(t), np.sin(t), np.sin(_ph)) for t in thetas])  # , dtype=type(np.array(3, dtype=np.float64)))
         if self.has_star:
             mag_pos[0] = 0
+            self.mass[0] = self.star_mass
         # print("norm_pos =", norm_pos, len(norm_pos))
         self.pos[0] = np.array([mag_pos[n] * norm_pos[n] for n in range(0, self.N_bods)])
 
-    def set_relposvel(self):
+    def set_rel_pv(self):
         """
 
         :return:
@@ -115,12 +118,13 @@ class NewtonMatrix(SceneCanvas):
                 if j != i:
                     d_sqr = np.linalg.norm(self.rel_posvel[self.ticks, i, j])
                     d_sqr *= d_sqr
-                    print(i, j, d_sqr)
                     if d_sqr != 0:
                         accel += -self.G * self.mass[i] / d_sqr
 
             self.matrix[self.ticks, j, j] = accel
             self.accel[self.ticks, j] = accel
+            print("accel[", j, "] =", accel)
+            print("\td_accel[", j, "] =", accel - self.accel[self.ticks - 1, j], "\n")
 
     def update_posvel(self):
         """
@@ -128,12 +132,12 @@ class NewtonMatrix(SceneCanvas):
         :return:
         :rtype:
         """
-        self.ticks = (self.ticks + 1) % self.N_frames
         for i in range(0,self.N_bods - 1):
-            print("position[", i, "] =", self.pos[self.ticks], self.pos[self.ticks].shape)
-            print("velocity[", i, "] =", self.vel[self.ticks], self.vel[self.ticks].shape)
-            self.vel[self.ticks, i] += self.matrix[self.ticks - 1, i + 1, i + 1] * self.warp
-            self.pos[self.ticks, i] += self.vel[self.ticks - 1, i] * self.warp
+            # print("position[", i, "] =\n", self.pos[self.ticks], self.pos[self.ticks].shape)
+            # print("velocity[", i, "] =\n", self.vel[self.ticks], self.vel[self.ticks].shape)
+            self.vel[self.ticks + 1, i] += self.matrix[self.ticks, i + 1, i + 1] * self.warp
+            self.pos[self.ticks + 1, i] += self.vel[self.ticks, i] * self.warp
+        self.ticks = (self.ticks + 1) % self.N_frames - 1
 
     def iterate(self, event):
         """
@@ -141,11 +145,10 @@ class NewtonMatrix(SceneCanvas):
         :return:
         :rtype:
         """
-        self.set_positions()
-        self.set_relposvel()
+        self.set_rel_pv()
         self.set_accel()
         self.update_posvel()
-        self.particles.set_data(pos=self.pos, size=2, edge_color="red", edge_width=1)
+        self.particles.set_data(pos=self.pos[self.ticks], size=2, edge_color="red", edge_width=1)
 
 
 def axis_visual(scale=1.0, parent=None):
@@ -194,7 +197,7 @@ def main(viz=None):
     can.axes.transform = trx
     can.view.add(can.axes)
     can.view.add(can.particles)
-    can.set_positions()
+    can.init_pos()
     can.show()
     can.timer.start()
     can.app.run()
