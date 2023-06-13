@@ -17,8 +17,12 @@ class NewtonMatrix(SceneCanvas):
 
     """
 
-    def __init__(self, num_bods=50, mass=None, pos_0=None, vel_0=None,
-                 t_start=0, t_end=100, n_frames=100, has_star=True, *args, **kwargs):
+    def __init__(self,
+                 num_bods=4,
+                 t_start=1, t_end=100,
+                 n_frames=100,
+                 has_star=True,
+                 *args, **kwargs):
         """
 
         :type T0: np.float64
@@ -27,7 +31,7 @@ class NewtonMatrix(SceneCanvas):
         global norm_pos, mag_pos
         super(NewtonMatrix, self).__init__(title="Figuring out Markers, Numpy, Transforms and SHIT",
                                            keys='interactive',
-                                           fullscreen=True, size=(800, 600))
+                                           *args, **kwargs)
         self.unfreeze()
         G_base = 6.67430e-11                        # gravitational constant
         G_tweak = 1.0                               # tweak gravity by this factor
@@ -35,15 +39,7 @@ class NewtonMatrix(SceneCanvas):
         self.N_frames = n_frames                    # number of snapshots over time interval
         self.ticks = 0
         self.warp = 0.01                            # 'time' elapsed per frame
-        self.T_0 = t_start                          # 'time' at start of simulation
-        self.T_1 = t_end                            # 'time' at end of simulation
-        self.T_n = np.linspace(start=self.ticks,
-                               stop=self.N_frames,
-                               num=self.N_frames,
-                               )
-        if has_star:                                # if central mass desired,
-            num_bods += 1                           #   add another spot for it
-
+        self.has_star = has_star
         self.N_bods = num_bods                      # number of particles to create
         self.zero = np.zeros(3, dtype=np.float64)   # default zero vector
         self.cm_pos = self.zero.copy()              # center of mass position
@@ -64,16 +60,15 @@ class NewtonMatrix(SceneCanvas):
                                 3), dtype=np.float64)
 
         self.frame_t = self.matrix[:, 0, 0]
-        self.frame_t = self.T_n
+        self.frame_t = np.linspace(start=t_start, stop=t_end, num=n_frames)
         self.pos = self.matrix[:, 1:, 0]
         self.vel = self.matrix[:, 0, 1:]
         self.rel_posvel = self.matrix[:, 1:, 1:]
 
         self.view = self.central_widget.add_view()
+        self.axes = axis_visual(scale=100, parent=self.view.scene)
         self.particles = Markers(parent=self.view.scene)
-        self.view.add(self.particles)
-        self.set_positions()
-
+        self.timer = app.Timer(interval=self.warp, connect=self.iterate, start=False, app=self.app)
         self.freeze()
 
     # =========================================================================================
@@ -92,10 +87,10 @@ class NewtonMatrix(SceneCanvas):
         # print("mag_pos =", mag_pos, len(mag_pos))
         norm_pos = np.array(
             [(np.cos(t), np.sin(t), np.sin(_ph)) for t in thetas])  # , dtype=type(np.array(3, dtype=np.float64)))
-        mag_pos[0] = 0
+        if self.has_star:
+            mag_pos[0] = 0
         # print("norm_pos =", norm_pos, len(norm_pos))
-        self.pos = [mag_pos[n] * norm_pos[n] for n in range(0, self.N_bods)]
-
+        self.pos[0] = np.array([mag_pos[n] * norm_pos[n] for n in range(0, self.N_bods)])
 
     def set_relposvel(self):
         """
@@ -103,10 +98,9 @@ class NewtonMatrix(SceneCanvas):
         :return:
         :rtype:
         """
-        for j, i in [range(0, self.N_bods), range(0, self.N_bods)]:
-            # for i in range(0, self.N_bods):
-            self.rel_posvel[self.ticks] = self.pos[self.ticks, j] - self.pos[self.ticks, i]
-
+        for j in range(0, self.N_bods):
+            for i in range(0, self.N_bods):
+                self.rel_posvel[:, i, j] = self.pos[:, j] - self.pos[:, i]
 
     def set_accel(self):
         """
@@ -119,11 +113,14 @@ class NewtonMatrix(SceneCanvas):
             for i in range(0, self.N_bods):
 
                 if j != i:
-                    accel += -self.G * self.mass[i] / np.power(self.rel_posvel[self.T_n, i, j, 2])
+                    d_sqr = np.linalg.norm(self.rel_posvel[self.ticks, i, j])
+                    d_sqr *= d_sqr
+                    print(i, j, d_sqr)
+                    if d_sqr != 0:
+                        accel += -self.G * self.mass[i] / d_sqr
 
             self.matrix[self.ticks, j, j] = accel
             self.accel[self.ticks, j] = accel
-
 
     def update_posvel(self):
         """
@@ -131,9 +128,25 @@ class NewtonMatrix(SceneCanvas):
         :return:
         :rtype:
         """
-        self.ticks += 1
-        self.vel[self.ticks] += self.accel[self.ticks - 1] * self.warp
-        self.pos[self.ticks] += self.vel[self.ticks] * self.warp
+        self.ticks = (self.ticks + 1) % self.N_frames
+        for i in range(0,self.N_bods - 1):
+            print("position[", i, "] =", self.pos[self.ticks], self.pos[self.ticks].shape)
+            print("velocity[", i, "] =", self.vel[self.ticks], self.vel[self.ticks].shape)
+            self.vel[self.ticks, i] += self.matrix[self.ticks - 1, i + 1, i + 1] * self.warp
+            self.pos[self.ticks, i] += self.vel[self.ticks - 1, i] * self.warp
+
+    def iterate(self, event):
+        """
+
+        :return:
+        :rtype:
+        """
+        self.set_positions()
+        self.set_relposvel()
+        self.set_accel()
+        self.update_posvel()
+        self.particles.set_data(pos=self.pos, size=2, edge_color="red", edge_width=1)
+
 
 def axis_visual(scale=1.0, parent=None):
     """
@@ -165,7 +178,7 @@ def axis_visual(scale=1.0, parent=None):
 def main(viz=None):
     # print("MAIN")
 
-    can = NewtonMatrix()
+    can = NewtonMatrix(fullscreen=False)
     # view.camera = "arcball"
     #
     # matrix = NewtonMatrix()
@@ -175,14 +188,15 @@ def main(viz=None):
     # timer.start(0)
     # view.camera.set_range()
     # timer = app.Timer(connect=matrix.on_timer, iterations=matrix.T_MAX, start = True)
-    frame = axis_visual(scale=1000000, parent=can.view.scene)
     trx = MatrixTransform()
     trx.rotate(-90, [1, 0, 0])
     trx.scale((1, 1))
-    frame.transform = trx
-    can.view.add(frame)
-    # can.particles.parent=frame
+    can.axes.transform = trx
+    can.view.add(can.axes)
+    can.view.add(can.particles)
+    can.set_positions()
     can.show()
+    can.timer.start()
     can.app.run()
 
 
