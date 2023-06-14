@@ -5,7 +5,6 @@ from vispy import app
 from vispy.scene import SceneCanvas
 from vispy.scene.visuals import XYZAxis, Markers
 from vispy.visuals.transforms import MatrixTransform
-from vispy.scene.cameras import FlyCamera
 
 
 class NewtonMatrix(SceneCanvas):
