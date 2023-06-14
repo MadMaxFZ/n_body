@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+from numpy import ndarray
 from vispy import app
 from vispy.scene import SceneCanvas
 from vispy.scene.visuals import XYZAxis, Markers
@@ -18,11 +19,11 @@ class NewtonMatrix(SceneCanvas):
     """
 
     def __init__(self,
-                 num_bods=,
+                 num_bods=7,
                  t_start=1, t_end=100,
-                 n_frames=100,
+                 n_frames=20,
                  has_star=True,
-                 star_mass=100,
+                 star_mass=10000,
                  *args, **kwargs):
         """
 
@@ -68,38 +69,40 @@ class NewtonMatrix(SceneCanvas):
         self.rel_posvel = self.matrix[:, 1:, 1:]
 
         self.view = self.central_widget.add_view()
-        self.axes = axis_visual(scale=100, parent=self.view.scene)
+        self.axes = axis_visual(scale=10000, parent=self.view.scene)
         self.particles = Markers(parent=self.view.scene)
+        self.init_pos0()
+        self.view.add(self.axes)
+        self.view.add(self.particles)
         self.timer = app.Timer(interval=self.warp, connect=self.iterate, start=False, app=self.app)
         self.freeze()
 
     # =========================================================================================
 
-    def init_pos(self):
+    def init_pos0(self):
         """
 
         :return:
         :rtype:
         """
         # put a randomized distribution of positions here
-        self.mass = np.linspace(start=1, stop=1, num=self.N_bods)
-        thetas = np.linspace(0, 2 * np.pi, self.N_bods)
-        _ph = 0
-        mag_pos = np.random.normal(loc=200, scale=50, size=self.N_bods)
-        # print("mag_pos =", mag_pos, len(mag_pos))
-        norm_pos = np.array(
-            [(np.cos(t), np.sin(t), np.sin(_ph)) for t in thetas])  # , dtype=type(np.array(3, dtype=np.float64)))
+        self.mass = np.linspace(start=10, stop=11, num=self.N_bods)
+        th = np.linspace(0, 2 * np.pi, self.N_bods)
+        cos_th = np.cos(th)
+        sin_th = np.sin(th)
+        mag_pos = np.random.normal(loc=100, scale=20, size=self.N_bods)
+        _ph = np.zeros(self.N_bods, dtype=np.float64)
+
         if self.has_star:
             mag_pos[0] = 0
             self.mass[0] = self.star_mass
-        # print("norm_pos =", norm_pos, len(norm_pos))
-        self.pos[0] = np.array([mag_pos[n] * norm_pos[n] for n in range(0, self.N_bods)])
+        pos0 = np.array([cos_th, sin_th, _ph]).reshape(3, self.N_bods)
+        print(mag_pos.shape, _ph.shape, pos0.shape)
+        self.pos = mag_pos * pos0
+        self.iterate(None)
 
     def set_rel_pv(self):
         """
-
-        :return:
-        :rtype:
         """
         for j in range(0, self.N_bods):
             for i in range(0, self.N_bods):
@@ -107,9 +110,6 @@ class NewtonMatrix(SceneCanvas):
 
     def set_accel(self):
         """
-
-        :return:
-        :rtype:
         """
         for j in range(0, self.N_bods):
             accel = self.zero.copy()
@@ -123,32 +123,37 @@ class NewtonMatrix(SceneCanvas):
 
             self.matrix[self.ticks, j, j] = accel
             self.accel[self.ticks, j] = accel
-            print("accel[", j, "] =", accel)
-            print("\td_accel[", j, "] =", accel - self.accel[self.ticks - 1, j], "\n")
+            d_accel = np.linalg.norm(accel - self.accel[self.ticks - 1, j])
+            d_d_accel = d_accel - np.linalg.norm(self.matrix[self.ticks - 1, j, j] - self.matrix[self.ticks - 2, j, j])
+            # print("accel[", j, "] =", accel)
+            # print("\td_d_accel[", j, "] =", d_d_accel, "\n")
 
     def update_posvel(self):
         """
-
-        :return:
-        :rtype:
         """
         for i in range(0,self.N_bods - 1):
             # print("position[", i, "] =\n", self.pos[self.ticks], self.pos[self.ticks].shape)
             # print("velocity[", i, "] =\n", self.vel[self.ticks], self.vel[self.ticks].shape)
-            self.vel[self.ticks + 1, i] += self.matrix[self.ticks, i + 1, i + 1] * self.warp
-            self.pos[self.ticks + 1, i] += self.vel[self.ticks, i] * self.warp
-        self.ticks = (self.ticks + 1) % self.N_frames - 1
+            self.vel[self.ticks + 1] = self.vel[self.ticks] + self.matrix[self.ticks, i + 1, i + 1] * self.warp
+        print(self.pos[self.ticks + 1], "\n", self.pos[self.ticks], "\n",  self.vel[self.ticks + 1], "\n", self.warp)
+        self.pos[self.ticks + 1] = self.pos[self.ticks] + self.vel[self.ticks + 1] * self.warp
+
+        self.ticks += 1
+        self.ticks = self.ticks % self.N_frames - 1
 
     def iterate(self, event):
-        """
-
+        """     This method is called by the timer.
+            It computes the relative positions, the resulting accelerations, then updates the next pos and vel.
+            Finally, is sets the pos data for the particle markers.
         :return:
         :rtype:
         """
         self.set_rel_pv()
         self.set_accel()
         self.update_posvel()
+        print(self.pos[self.ticks])
         self.particles.set_data(pos=self.pos[self.ticks], size=2, edge_color="red", edge_width=1)
+        logging.info(str(self.matrix[self.ticks]))
 
 
 def axis_visual(scale=1.0, parent=None):
@@ -178,59 +183,21 @@ def axis_visual(scale=1.0, parent=None):
     return axis
 
 
-def main(viz=None):
+def main():
     # print("MAIN")
 
-    can = NewtonMatrix(fullscreen=False)
-    # view.camera = "arcball"
-    #
-    # matrix = NewtonMatrix()
-    # view.add(matrix)
-    # timer = app.Timer(iterations=matrix.T_MAX, interval=1)
-    # timer.connect(matrix.iterate())
-    # timer.start(0)
-    # view.camera.set_range()
-    # timer = app.Timer(connect=matrix.on_timer, iterations=matrix.T_MAX, start = True)
     trx = MatrixTransform()
     trx.rotate(-90, [1, 0, 0])
     trx.scale((1, 1))
+
+    can = NewtonMatrix(fullscreen=False)
+    can.init_pos0()
     can.axes.transform = trx
-    can.view.add(can.axes)
-    can.view.add(can.particles)
-    can.init_pos()
+    can.axes.visible = True
+    can.particles.visible = True
     can.show()
     can.timer.start()
     can.app.run()
-
-
-# def iter_matrix():
-#     # N = 10
-#     # MAX_T = 10
-#     # T = 0
-#     # mass = [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., ]
-#     # theta = np.linspace(0, 359, N)
-#     # radius = np.random.normal(loc=1000, scale=100, size=N)
-#     # pos_0 = np.zeros((N, 3), dtype=np.float64)
-#     # vel_0 = np.zeros((N, 3), dtype=np.float64)
-#     # vel0_dir = np.zeros((N, 3), dtype=np.float64)
-#
-#     # for n in range(0, N - 1):
-#     #     r = radius[n]
-#     #     ct = np.cos(theta[n])
-#     #     st = np.sin(theta[n])
-#     #     print(r, ct, st)
-#     #     pos_0[n] = [r * ct, r * st, 0]
-#     #     vel0_dir[n] = np.cross(pos_0[n], [0.0, 0.0, 1.0]) / np.linalg.norm(pos_0[n])
-#     #     vel_0[n] = vel0_dir[n] * (1 / np.sqrt(np.linalg.norm(pos_0[n])))
-#
-#
-#
-#     while NM.T0 < NM.T_MAX:
-#         NM.iterate()
-#
-#     return NM
-#
-#     print(np.array(NM.M_hist).shape)
 
 
 if __name__ == '__main__':
