@@ -18,7 +18,7 @@ class NewtonMatrix(SceneCanvas):
     """
 
     def __init__(self,
-                 num_bods=4,
+                 num_bods=,
                  t_start=1, t_end=100,
                  n_frames=100,
                  has_star=True,
