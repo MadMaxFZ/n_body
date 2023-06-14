@@ -130,7 +130,7 @@ class NewtonMatrix(SceneCanvas):
 
             self.matrix[self.ticks, j, j] = accel
             self.accel[self.ticks, j] = accel
-        logging.info(str(self.ticks) + ": set_accel()")
+        logging.info(str(self.ticks) + ": set_accel()\n" + str(self.accel[self.ticks]))
 
     # -----------------------------------------------------------------------------------------------------------
     def update_posvel(self):
@@ -166,9 +166,9 @@ class NewtonMatrix(SceneCanvas):
         # print(self.ticks, "\n", self.pos[self.ticks])
         self.particles.set_data(pos=self.pos[self.ticks], size=2, edge_color="red", edge_width=1)
         logging.info(str(self.ticks) + ": iterate()")
-        logging.info(str(self.matrix[self.ticks, 0, 1]))
-        logging.info(str(self.matrix[self.ticks, 1, 0]))
-        logging.info(str([self.matrix[self.ticks, n + 1, n + 1] for n in range(0, self.N_bods)]))
+        logging.info("pos " + str(self.matrix[self.ticks, 0, 1]))
+        logging.info("vel " + str(self.matrix[self.ticks, 1, 0]))
+        logging.info("accel " + str([self.matrix[self.ticks, n + 1, n + 1] for n in range(0, self.N_bods)]))
 
 
 # -----------------------------------------------------------------------------------------------------------
