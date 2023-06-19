@@ -16,11 +16,11 @@ class NewtonMatrix(SceneCanvas):
                         format='PV_%(levelname)s:%(asctime)s:%(message)s'
                         )
     def __init__(self,
-                 num_bods=50,
+                 num_bods=30,
                  t_start=1, t_end=100,
                  n_frames=1000,
                  has_star=True,
-                 star_mass=10000,
+                 star_mass=1000000,
                  *args, **kwargs):
         """
 
@@ -33,7 +33,7 @@ class NewtonMatrix(SceneCanvas):
                                            *args, **kwargs)
         self.unfreeze()
         G_base = 6.67430e-11                            # gravitational constant
-        G_tweak = 10000.0                                   # tweak gravity by this factor
+        G_tweak = 1000.0                                   # tweak gravity by this factor
         self.N_bods = num_bods                          # number of particles to create
         self.G = G_base * G_tweak                       #
         self.N_frames = n_frames                        # number of snapshots over time interval
@@ -75,7 +75,6 @@ class NewtonMatrix(SceneCanvas):
         self.axes = axis_visual(scale=500,
                                 parent=self.view.scene)
         self.particles = Markers(parent=self.view.scene)
-        self.init_pos0()
         self.particles.set_data(pos=self.pos[0])
         self.view.add(self.axes)
         self.view.add(self.particles)
@@ -92,7 +91,7 @@ class NewtonMatrix(SceneCanvas):
         th = np.linspace(0, 2 * np.pi, self.N_bods)
         cos_th = np.cos(th)
         sin_th = np.sin(th)
-        mag_pos = np.random.normal(loc=50, scale=20, size=self.N_bods)
+        mag_pos = np.random.normal(loc=40, scale=10, size=self.N_bods)
         _ph = np.zeros(self.N_bods, dtype=np.float64)
         pos0 = self.pos[0]
         if self.has_star:
@@ -139,14 +138,16 @@ class NewtonMatrix(SceneCanvas):
         for i in range(0,self.N_bods - 1):
             # print("position[", i, "] =\n", self.pos[self.ticks], self.pos[self.ticks].shape)
             # print("velocity[", i, "] =\n", self.vel[self.ticks], self.vel[self.ticks].shape)
-            self.vel[self.ticks + 1] = self.vel[self.ticks] + self.matrix[self.ticks, i + 1, i + 1] * self.warp
+            self.vel[self.ticks + 1] = self.vel[self.ticks] + self.matrix[self.ticks, i + 1, i + 1]     # * self.warp
             self.vel[self.ticks + 1, :, 2] = 0.0
             # print(self.pos[self.ticks + 1], "\n", self.pos[self.ticks], "\n",  self.vel[self.ticks + 1], "\n", self.warp)
-            self.pos[self.ticks + 1] = self.pos[self.ticks] + self.vel[self.ticks + 1] * self.warp
+            self.pos[self.ticks + 1] = self.pos[self.ticks] + self.vel[self.ticks + 1]  # * self.warp
             self.pos[self.ticks + 1, :, 2] = 0.0
             if self.has_star and i == 0:
-                self.pos[self.ticks + 1, 0] = self.zero.copy()
-                self.vel[self.ticks + 1, 0] = self.zero.copy()
+                d_pos = self.pos[self.ticks + 1, 0]
+                d_vel = self.vel[self.ticks + 1, 0]
+                self.pos[self.ticks + 1] -= d_pos
+                self.vel[self.ticks + 1, 0] -= d_vel
 
         self.ticks += 1
         self.ticks = self.ticks % (self.N_frames - 1)
@@ -208,6 +209,7 @@ def main():
     trx.scale((ax_scale, ) * 3)
 
     can = NewtonMatrix(fullscreen=False)
+    can.init_pos0()
     can.axes.transform = trx
     can.axes.visible = True
     can.particles.visible = True
